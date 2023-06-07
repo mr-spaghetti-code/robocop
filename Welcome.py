@@ -14,8 +14,6 @@ st.markdown(
     ### How does it work?
     First, go to "Load Data" and enter the URL of a public GitHub repo then click "Analyze". Robocop will download and process all the files in the repo.
     Next, you will be able to chat with an LLM (like ChatGPT) to identify potential vulnerabilities.
-
-    ***👈 Click on "Chat" on the sidebar to get started.***
     """
 )
 

@@ -25,6 +25,10 @@ dataset_name = st.text_input(
     label="Dataset name"
 )
 
+if "settings_override" not in st.session_state:
+    st.session_state["settings_override"] = False
+
+
 os.environ['OPENAI_API_KEY'] = st.session_state["openai_api_key"] if st.session_state["settings_override"] else st.secrets.openai_api_key
 os.environ['ACTIVELOOP_TOKEN'] = st.session_state["activeloop_api_key"] if st.session_state["settings_override"] else st.secrets.activeloop_api_key
 

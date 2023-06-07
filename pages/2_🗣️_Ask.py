@@ -27,8 +27,13 @@ st.set_page_config(page_title="Q&A", page_icon="🤖")
 st.markdown("# Q&A")
 st.sidebar.header("Q&A")
 
-st.write(
-    """Now that the code has been processed, you can ask it questions. Load the embeddings then chat with Robocop."""
+st.markdown(
+    """Now that the code has been processed, you can ask it questions.
+    
+    1. Load the embeddings then chat with Robocop. (eg. dataset name: lido-dao or uniswap-v3)
+    2. Click on "Start" to load Robocop and start a conversation.
+    3. Type in your question or instruction in the "You:" box and click "Ask" to get an answer.
+    """
 )
 
 dataset_name = st.text_input(
@@ -49,7 +54,11 @@ if "settings_override" not in st.session_state:
     st.session_state["settings_override"] = ''
 
 if "retriever" not in st.session_state:
-    st.session_state["settings_override"] = ''
+    db = DeepLake(dataset_path="hub://mrspaghetticode/uniswap-v3", read_only=True)
+    st.session_state["retriever"] = db.as_retriever()
+
+if "system_message_prompt" not in st.session_state:
+    st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template("This is a GitHub repo.")
 
 
 os.environ['OPENAI_API_KEY'] = st.session_state["openai_api_key"] if st.session_state["settings_override"] else st.secrets.openai_api_key
@@ -112,7 +121,7 @@ with st.expander("Advanced settings"):
     )
     model_option = st.selectbox(
         "What model would you like to use?",
-        ('gpt-3.5-turbo','gpt-4', "claude-v1")
+        ("claude-v1", 'gpt-3.5-turbo','gpt-4')
     )
     temperature = st.text_input(
         label="Set temperature: 0 (deterministic) to 1 (more random).",
@@ -165,6 +174,7 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
 def get_qa_model(model_option):
     # some notes on memory
     # https://stackoverflow.com/questions/76240871/how-do-i-add-memory-to-retrievalqa-from-chain-type-or-how-do-i-add-a-custom-pr
+    retriever = st.session_state["retriever"]
 
     if model_option.startswith("gpt"):
         logger.info('Using OpenAI model %s', model_option)
@@ -174,7 +184,7 @@ def get_qa_model(model_option):
                 temperature=float(temperature),
                 max_tokens=max_tokens
             ),
-            retriever=st.session_state["retriever"],
+            retriever=retriever,
             memory=memory,
             verbose=True
         )
@@ -185,7 +195,7 @@ def get_qa_model(model_option):
                 temperature=float(temperature),
                 max_tokens_to_sample=max_tokens
         ),
-        retriever=st.session_state["retriever"],
+        retriever=retriever,
         memory=memory,
         verbose=True,
         max_tokens_limit=102400
@@ -204,8 +214,6 @@ def generate_system_prompt():
     logger.info(final_prompt)
     return final_prompt
     
-if "system_message_prompt" not in st.session_state:
-    st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template(generate_system_prompt())
 
 
 def generate_response(prompt, chat_history):
@@ -213,7 +221,19 @@ def generate_response(prompt, chat_history):
     # https://python.langchain.com/en/latest/modules/indexes/getting_started.html
     # https://github.com/hwchase17/langchain/discussions/3115
     qa = get_qa_model(model_option)
-    # ConversationalRetrievalChain.prompts = LANGUAGE_PROMPT
+
+    print(qa)
+    print("*****")
+    print(qa.question_generator.prompt.template)
+
+    qa.question_generator.prompt.template = """
+    Given the following conversation and follow up question, rephrase the follow up question to be a standalone question. Ensure that the output is in English.
+
+    Chat History:
+    {chat_history}
+    Follow Up Input: {question}
+    Standalone question: 
+    """
     qa.combine_docs_chain.llm_chain.prompt.messages[0] = st.session_state["system_message_prompt"]
 
     response = qa.run(
@@ -227,6 +247,7 @@ def generate_response(prompt, chat_history):
 
 def generate_first_response():
     with st.spinner('Loading Robocop...'):
+        st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template(generate_system_prompt())
         first_prompt = "Please provide an overview of the codebase along with some potential areas to examine for vulnerabilities."
         print(st.session_state["chat_history"])
         first_response = generate_response(first_prompt, st.session_state["chat_history"])
