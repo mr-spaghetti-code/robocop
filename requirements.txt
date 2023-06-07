@@ -1,6 +1,7 @@
 openai
 tiktoken
 deeplake
+anthropic
 langchain==0.0.189
 streamlit==1.23.1
 streamlit-chat==0.0.2.2

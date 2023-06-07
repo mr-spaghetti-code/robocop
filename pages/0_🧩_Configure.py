@@ -20,6 +20,9 @@ if "openai_api_key" not in st.session_state:
 if "activeloop_api_key" not in st.session_state:
     st.session_state["activeloop_api_key"] = ''
 
+if "anthropic_api_key" not in st.session_state:
+    st.session_state["anthropic_api_key"] = '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'
+
 if st.button("Submit"):
     if not openai_api_key.startswith('sk-'):
         st.warning('Please enter your OpenAI API key. It starts with "sk-..."', icon='⚠')

@@ -11,8 +11,6 @@ st.set_page_config(page_title="Analyze Repo", page_icon="🤖")
 
 st.markdown("# Analyze")
 st.sidebar.header("Analyze Repo")
-# openai_api_key = st.sidebar.text_input('OpenAI API Key')
-# activeloop_api_key = st.sidebar.text_input('Activeloop Key')
 
 st.write(
   """First, we have to load all the code from the repo you are investigating."""
@@ -27,8 +25,8 @@ dataset_name = st.text_input(
     label="Dataset name"
 )
 
-os.environ['OPENAI_API_KEY'] = st.session_state["openai_api_key"]
-os.environ['ACTIVELOOP_TOKEN'] = st.session_state["activeloop_api_key"]
+os.environ['OPENAI_API_KEY'] = st.session_state["openai_api_key"] if st.session_state["settings_override"] else st.secrets.openai_api_key
+os.environ['ACTIVELOOP_TOKEN'] = st.session_state["activeloop_api_key"] if st.session_state["settings_override"] else st.secrets.activeloop_api_key
 
 with st.expander("Advanced settings"):
     filter_extension = st.text_input(
@@ -59,7 +57,7 @@ def load_text(clone_url):
 
 def compute_embeddings(texts):
   dataset_path = f'hub://mrspaghetticode/{dataset_name}'
-  embeddings = OpenAIEmbeddings(disallowed_special=())
+  embeddings = OpenAIEmbeddings(model='text-embedding-ada-002')
   DeepLake.from_documents(texts, embeddings, dataset_path=dataset_path)
   return dataset_name
 
