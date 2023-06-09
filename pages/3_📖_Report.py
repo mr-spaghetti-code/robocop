@@ -22,6 +22,8 @@ from langchain.schema import (
     SystemMessage
 )
 
+st.set_page_config(page_title="Report", page_icon="📖")
+
 st.markdown(
     """This section pulls raw code directly from Github instead of finding relevant embeddings then generates a report.
     """
@@ -298,15 +300,13 @@ if "reports_to_generate" not in st.session_state:
 
 os.environ['ANTHROPIC_API_KEY'] = st.session_state["anthropic_api_key"] if st.session_state["settings_override"] else st.secrets.anthropic_api_key
 
-st.set_page_config(page_title="Report", page_icon="🤖")
-
 st.markdown("# Report")
 
 github_url = st.text_input(
     label="Enter the URL of a _public_ GitHub repo")
 
 commit_branch = st.text_input(label="Enter the commit ID (optional) or branch (default:main",
-    value="master")
+    value="master or main or your commit ID")
 
 
 def load_text(clone_url):
@@ -314,7 +314,7 @@ def load_text(clone_url):
     loader = GitLoader(
         clone_url=clone_url,
         repo_path=tmpdirname,
-        branch=commit_banch
+        branch=commit_branch
     )
     data = loader.load()
     st.session_state["raw_code"] = data
