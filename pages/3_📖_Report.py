@@ -25,7 +25,7 @@ from langchain.schema import (
 st.markdown(
     """This section pulls raw code directly from Github instead of finding relevant embeddings then generates a report.
     """
-
+)
 
 logger = get_logger(__name__)
 
