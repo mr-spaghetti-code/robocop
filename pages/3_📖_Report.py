@@ -3,11 +3,15 @@ import json
 import os
 import tempfile
 
+from prompts.claude import prompts
 import streamlit as st
 
 from streamlit.logger import get_logger
+from langchain.chains import LLMChain
 from langchain.chat_models import ChatAnthropic
 from langchain.document_loaders import GitLoader
+from langchain.llms import Anthropic
+
 
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -297,6 +301,9 @@ if "contract_names" not in st.session_state:
 if "reports_to_generate" not in st.session_state:
     st.session_state["reports_to_generate"] = []
 
+# if "vulnerabilities_to_find" not in st.session_state:
+#     st.session_state["vulnerabilities_to_find"] = []
+
 
 os.environ['ANTHROPIC_API_KEY'] = st.session_state["anthropic_api_key"] if st.session_state["settings_override"] else st.secrets.anthropic_api_key
 
@@ -314,7 +321,8 @@ def load_text(clone_url):
     loader = GitLoader(
         clone_url=clone_url,
         repo_path=tmpdirname,
-        branch=commit_branch
+        branch=commit_branch,
+        file_filter=lambda file_path: file_path.endswith(".sol")
     )
     data = loader.load()
     st.session_state["raw_code"] = data
@@ -359,11 +367,14 @@ reports_to_generate = st.multiselect(
 
 st.session_state["reports_to_generate"] = reports_to_generate
 
-st.write('You selected:', st.session_state["reports_to_generate"])
+vulnerabilities_to_find = st.multiselect(
+    "Pick the vulnerabilities to look for.",
+    list(prompts.VULNERABILITIES.keys())
+)
 
 generated_reports = []
 
-chat = ChatAnthropic(
+llm = Anthropic(
     temperature=0,
     max_tokens_to_sample=1024,
     verbose=True
@@ -375,7 +386,8 @@ if st.button("Generate Reports"):
         st.info(f'Generating report for {report}', icon="ℹ️")
         summary = ''
         gen_report = {}
-        gen_report['file'] = report
+        gen_report[report] = {}
+        gen_report[report]["file"] = report
         with st.spinner('Retrieving code...'):
             code = filter_by_name(report)[0].page_content
             num_tokens = anthropic.count_tokens(code)
@@ -384,61 +396,35 @@ if st.button("Generate Reports"):
             logger.info(f"Processing code:\n{code}")
             status.info(f'Retrieved code for {report} - Processing {num_tokens} tokens.', icon="ℹ️")
         with st.spinner('Getting summary...'):
-            # Build template
-            system_message_prompt = SystemMessagePromptTemplate.from_template(SYSTEM_TEMPLATE_SUMMARIZE)
-            chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt])
-            messages = chat_prompt.format_prompt(
-                task=SYSTEM_TEMPLATE_TASK_SUMMARIZE, 
-                code=code
-                ).to_messages()
-
-            # Query LLM
-            
-            response = chat(messages)
-            summary = response.content
-            gen_report['summary'] = summary
-            st.write(summary)
-        with st.spinner('Scanning for arithmetic bugs...'):
-            summary_inject_prompt = f"""
-            Smart contract analyzed: {report}
-            --------
-            Summary:
-            {summary}
-            --------
-            """
-            system_message_prompt = SystemMessagePromptTemplate.from_template(
-                SYSTEM_TEMPLATE_PERSONA + summary_inject_prompt + SYSTEM_TEMPLATE_INFO)
-            chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt])
-            messages = chat_prompt.format_prompt(
-                task=SYSTEM_TEMPLATE_TASK_OVERFLOW + SYSTEM_TEMPLATE_RESPONSE_STRUCTURE, 
-                code=code
-                ).to_messages()
-            
-            response = chat(messages)
-            overflow_bugs = response.content
-            gen_report['overflow_bugs'] = overflow_bugs
-            st.write("Analysis results for Overflow vulnerabilities\n\n", overflow_bugs)
-        with st.spinner('Scanning for reentrancy bugs...'):
-            summary_inject_prompt = f"""
-            Smart contract analyzed: {report}
-            --------
-            Summary:
-            {summary}
-            --------
-            """
-            system_message_prompt = SystemMessagePromptTemplate.from_template(
-                SYSTEM_TEMPLATE_PERSONA + summary_inject_prompt + SYSTEM_TEMPLATE_INFO)
-            chat_prompt = ChatPromptTemplate.from_messages([system_message_prompt])
-            messages = chat_prompt.format_prompt(
-                task=SYSTEM_TEMPLATE_TASK_REENTRANCY + SYSTEM_TEMPLATE_RESPONSE_STRUCTURE, 
-                code=code
-                ).to_messages()
-            
-            response = chat(messages)
-            overflow_bugs = response.content
-            gen_report['reentrancy_bugs'] = overflow_bugs
-            st.write("Analysis results for reentrancy vulnerabilities\n\n", overflow_bugs)
-        generated_reports.append(gen_report)
+            chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_PROVIDE_SUMMARY)
+            response = chain.run({
+                'code': code
+                })
+            summary = response
+            logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
+            gen_report[report]['summary'] = response
+            st.write(response)
+        for vulnerability in vulnerabilities_to_find:
+            with st.spinner(f'Scanning for {vulnerability} bugs...'):
+                formatted_task = prompts.USER_TEMPLATE_TASK.format(
+                    type=vulnerability, 
+                    description=prompts.VULNERABILITIES[vulnerability]["description"], 
+                    examples=prompts.VULNERABILITIES[vulnerability]["description"])
+                
+                chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_WITH_SUMMARY)
+                response = chain.run({
+                    "smart_contract_name": report,
+                    "summary": summary,
+                    "code": code,
+                    "task": formatted_task
+                    })
+                logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
+                response = response.replace("<report>","").replace("</report>","").replace("<description>","").replace("</description>","").replace("<impact>","").replace("</impact>","").replace("<mitigation>","").replace("</mitigation>","")
+                gen_report[report]['bugs'] = {
+                    vulnerability : response.replace("<report>","").replace("</report>","")
+                }
+                st.write(f"# Analysis results for {vulnerability} vulnerabilities \n\n", response)
+                generated_reports.append(gen_report)
     logger.info(generated_reports)
     status.success("Done!")
     st.balloons()
