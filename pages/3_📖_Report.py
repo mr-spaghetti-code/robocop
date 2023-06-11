@@ -380,14 +380,18 @@ llm = Anthropic(
     verbose=True
 )
 
+output_txt = ""
+
 if st.button("Generate Reports"):
     status = st.info(f'Generating reports', icon="ℹ️")
+    output_txt += f"# Robocop Audit report Report for {github_url}\n"
     for report in st.session_state["reports_to_generate"]:
         st.info(f'Generating report for {report}', icon="ℹ️")
         summary = ''
         gen_report = {}
         gen_report[report] = {}
         gen_report[report]["file"] = report
+        output_txt += f"## File Analyzed: {report}\n"
         with st.spinner('Retrieving code...'):
             code = filter_by_name(report)[0].page_content
             num_tokens = anthropic.count_tokens(code)
@@ -403,6 +407,7 @@ if st.button("Generate Reports"):
             summary = response
             logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
             gen_report[report]['summary'] = response
+            output_txt += response + "\n"
             st.write(response)
         for vulnerability in vulnerabilities_to_find:
             with st.spinner(f'Scanning for {vulnerability} bugs...'):
@@ -423,17 +428,25 @@ if st.button("Generate Reports"):
                 gen_report[report]['bugs'] = {
                     vulnerability : response.replace("<report>","").replace("</report>","")
                 }
+                output_txt += f"# Analysis results for {vulnerability} vulnerabilities \n\n"
+                output_txt += response + "\n"
                 st.write(f"# Analysis results for {vulnerability} vulnerabilities \n\n", response)
                 generated_reports.append(gen_report)
     logger.info(generated_reports)
     status.success("Done!")
     st.balloons()
 
-    json_obj = json.dumps(generated_reports)
-    st.download_button(
-        label="Download data as JSON",
-        data=json_obj,
-        file_name='report_findings.json',
-        mime='application/json',
-    )
+json_obj = json.dumps(generated_reports)
+st.download_button(
+    label="Download data as JSON",
+    data=json_obj,
+    file_name='report_findings.json',
+    mime='application/json',
+)
+st.download_button(
+    label="Download data as Text (markdown)",
+    data=output_txt,
+    file_name='report_findings.md',
+    mime='text/plain',
+)
 
