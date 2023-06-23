@@ -80,6 +80,11 @@ github_url = st.text_input(
 commit_branch = st.text_input(label="Enter the commit ID (optional) or branch (default:main",
     value="master or main or your commit ID")
 
+load_markdown = st.checkbox(
+    label="Load markdown files alongside contracts",
+    value=True
+)
+
 def save_github_files(data):
     bucket = storage_client.from_('repo_contents')
     file = open('test.p', 'wb')
@@ -139,7 +144,7 @@ def load_text(clone_url, project_name):
             clone_url=clone_url,
             repo_path=tmpdirname,
             branch=commit_branch,
-            file_filter=lambda file_path: file_path.endswith(".sol")
+            file_filter=lambda file_path: file_path.endswith((".sol",".md"))
         )
         data = loader.load()
         save_github_files(data)
@@ -173,7 +178,12 @@ if button:
             logger.info("Data retrieved")
 
             contracts = filter_by_type(".sol")
-            logger.info(contracts)
+
+            if load_markdown: 
+                contracts +=  filter_by_type(".md")
+
+            logger.info([type(contracts), len(contracts)])
+            # logger.info(contracts)
             contract_names = [contract.metadata["file_path"] for contract in contracts]
             st.session_state["contract_names"] = contract_names
 
@@ -279,6 +289,7 @@ if st.button("Generate Summary"):
 
     # logger.info(generated_reports)
     # json_obj = json.dumps(generated_reports)
+    logger.info("Done!")
     status.success("Done!")
     st.balloons()
 
