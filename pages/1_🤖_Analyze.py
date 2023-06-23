@@ -10,7 +10,6 @@ from langchain.vectorstores import DeepLake
 st.set_page_config(page_title="Analyze Repo", page_icon="🤖")
 
 st.markdown("# Analyze")
-st.sidebar.header("Analyze Repo")
 
 st.write(
   """First, we have to load all the code from the repo you are investigating."""
@@ -52,6 +51,7 @@ def load_text(clone_url):
       branch=commit_branch,
       file_filter = lambda file_path: file_path.endswith(filter_extension)
   )
+  # loader = GitLoader(clone_url=clone_url, repo_path="./lido-dao", branch = "master", file_filter = lambda file_path: file_path.endswith(".sol"))
   data = loader.load()
   print(data[0])
   text_splitter = CharacterTextSplitter(chunk_size=int(chunk_size), chunk_overlap=20)

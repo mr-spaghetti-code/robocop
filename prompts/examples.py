@@ -635,3 +635,125 @@ GAS_EXCEEDED_EXAMPLES = [
         """
     }
 ]
+
+ROUNDING_ISSUES_EXAMPLES = [ 
+    {
+        "flawed": """
+        contract Victim {
+            uint public amount = 1;
+            uint public total;
+            function deposit(uint amt) public {
+                amount += amt * 10;     // Precision loss, amount will be 10 
+                total += amount;
+            } 
+        }
+        """,
+        "fixed": """
+        contract VictimFixed {
+            uint public amount = 1;
+            uint public total;
+            
+            function deposit(uint amt) public {
+                amount += amt * 10;     
+                total += (amount * 10 ** 18) / 10 ** 18;     // Use full precision amount
+            } 
+        }
+        """
+    },
+    {
+        "flawed": """
+        contract Victim {
+            uint public amount = 1;
+            
+            function divide() public {
+                amount /= 3;        // amount will be 0, rounding loss  
+            }
+        }
+        """, 
+        "fixed": """
+        contract VictimFixed {
+            uint public amount = 1;
+            
+            function divide() public {
+                amount = (amount * 10 ** 18) / (3 * 10 ** 18);     // Precise division
+            }
+        }
+        """
+    },
+    {
+        "flawed": """
+        contract Victim {
+            uint public amount1 = 1;
+            uint public amount2 = 2;
+            uint public total;
+            
+            function multiply() public {
+                total = amount1 * amount2;   // total will be 2, precision loss
+            }
+        }
+        """,
+        "fixed": """
+        contract VictimFixed {
+            uint public amount1 = 1;
+            uint public amount2 = 2;
+            uint public total;
+            
+            function multiply() public {
+                total = (amount1 * amount2) / (1 ether);    // Multiply with full precision 
+            }            
+        }
+        """
+    },
+    {
+        "flawed": """
+        contract Victim {
+            uint public balance = 1 ether;
+            uint public sendAmount = 0.1 ether;
+            
+            function sendFunds() public {
+                require(balance > sendAmount);   // Will pass incorrectly due to rounding
+                msg.sender.transfer(sendAmount);
+                balance -= sendAmount;           // balance will be 0.9 ether, rounding loss
+            }
+        }
+        """,
+        "fixed": """
+        contract VictimFixed {
+            uint public balance = 1 ether;
+            uint public sendAmount = 0.1 ether * 10 ** 18; // Use full precision 
+            
+            function sendFunds() public {
+                require(balance > sendAmount);   
+                msg.sender.transfer(sendAmount / (10 ** 18)); // Send with precision
+                balance -= sendAmount;                     // No rounding loss
+            }
+        }
+        """
+    },
+    {
+        "flawed": """
+        contract Victim {
+           mapping(address => uint) public balances; 
+           uint public totalSupply = 100 ether;
+           
+           function mint(address to, uint amount) public {
+               require(totalSupply + amount > totalSupply);   // Will pass incorrectly
+               balances[to] += amount;
+               totalSupply += amount;
+           }
+        }
+        """,
+        "fixed": """
+        contract VictimFixed {
+           mapping(address => uint) public balances; 
+           uint public totalSupply = 100 ether * 10 ** 18;  
+                          
+           function mint(address to, uint amount) public {
+               require(totalSupply + (amount * 10 ** 18) > totalSupply);  
+               balances[to] += amount * 10 ** 18;
+               totalSupply += amount * 10 ** 18;
+           }
+        }        
+        """
+    } 
+]

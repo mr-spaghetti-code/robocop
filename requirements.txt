@@ -1,6 +1,7 @@
 openai
 tiktoken
 deeplake
+storage3
 anthropic
 langchain==0.0.189
 streamlit==1.23.1

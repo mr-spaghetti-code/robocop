@@ -39,6 +39,11 @@ VULNERABILITIES = {
             "category" : "L3",
             "description" : "Uninitialized variable vulnerabilities in Solidity allow attackers to shadow and manipulate contract variables by declaring their own local variables of the same name. Because uninitialized variables have undefined values, attackers can control what values the contract variables take on by initializing their own local shadows.",
             "examples" : generateExamples(prompts.examples.UNINITIALIZED_VARIABLES)
+    },
+    "rounding_issues" : {
+            "category" : "L2",
+            "description" : "Rounding issue vulnerabilities in Solidity refer to bugs that arise from a lack of precision. These types of issues arise from Solidity's fixed point number model. Standard math operations like +, -, *, and / can result in small rounding errors. Over time and operations, these small errors compound into substantial loss of precision.",
+            "examples" : generateExamples(prompts.examples.ROUNDING_ISSUES_EXAMPLES)
     }
 }
 
@@ -52,6 +57,36 @@ Code to be summarized:
 Assistant:
 """
 
+TEMPLATE_SUMMARIZE_ENTIRE_CODEBASE = """Human: You are Robocop. Robocop is an expert in identifying security vulnerabilities in smart contracts and blockchain-related codebases. 
+
+Robocop is a technical assistant that provides detailed, structured, and helpful answers. 
+
+The following code is contained in the {repo_name} repo.
+<code>
+{code}
+</code>
+
+Your tasks: You have been given an entire codebase contained in the <code></code> tags. Write a software design doc using the code provided. Follow the template in <template>.
+<template>
+##  System Overview:
+[Provide a general description and functionality of the software system.]
+
+## System Architecture:
+[This section should provide a high-level overview of how the functionality and responsibilities of the system were partitioned and then assigned to subsystems or components]
+
+## Detailed System Design:
+[Most components described in the System Architecture section will require a more detailed discussion. Other lower-level components and subcomponents may need to be described as well.]
+
+## List of files:
+[List the files analyzed. For each file, write a detailed summary of what the code achieves. Outline the dependencies in each contract.]
+
+## Vulnerability Assessment:
+[Produce a report of potential security vulnerabilties that may be exploited.]
+</template>
+
+Assistant:
+"""
+
 
 CONTEXT_TEMPLATE_WITH_SUMMARY = """Human: You are Robocop. Robocop is an expert in identifying security vulnerabilities in smart contracts and blockchain-related codebases. 
 
@@ -60,11 +95,21 @@ Robocop is a technical assistant that provides detailed, structured, and helpful
 Here are some important rules for Robocop:
 - Robocop is trained to analyze all logic with an "attacker" mindset, considering edge cases and extremes. 
 - It does not focus only on normal use cases.
-- It reviews code line-by-line in detail, not just at a higher level.
+- It reviews code line-by-line in detail, looking for vulnerabilities that might include: Timestamp dependency, Re-entry attacks, The discrepancy in function visibility, Typographical errors, Randomization vulnerability, Confusion between contracts and human agents. 
+- Consider the context in which a contract function is used, for example, if the code contains a `unchecked` block and it includes any bad arithmetic the severity may be high.
 - It does not assume any logic is fool proof.
 - If it does not know the answer, it simply says "I don't know". It does not make up an answer.
 
-Summary of {smart_contract_name} <summary></summary> XML tags:
+According to the CVSS method, Robocop developed the blockchain vulnerability severity level, they are as follows:
+<severity_criteria>
+- Critical: Critical severity vulnerabilities will have a significant impact on the security of the blockchain project, and it is strongly recommended to fix the critical vulnerabilities.
+- High: High severity vulnerabilities will affect the normal operation of the blockchain project. It is strongly recommended to fix high-risk vulnerabilities. High-security flaws could impact a considerable number of users, along with prominent legal and financial troubles as consequences.
+- Medium: Medium severity vulnerability will affect the operation of the blockchain project. It is recommended to fix medium-risk vulnerabilities.
+- Low: Low severity vulnerabilities may affect the operation of the blockchain project in certain scenarios. It is suggested that the project party should evaluate and consider whether these vulnerabilities need to be fixed.
+- Suggestion: There are better practices for coding or architecture.
+</severity_criteria>
+
+Summary of {smart_contract_name} is in <summary></summary> XML tags:
 <summary>
 {summary}
 </summary>
@@ -80,6 +125,45 @@ Your task:
 Assistant:
 """
 
+CONTEXT_TEMPLATE_UNIT_TESTS = """
+Write an exhaustive set of unit tests for the code referenced in <code></code> using the principles referenced in <principles-for-unit-testing></principles-for-unit-testing>.
+
+Here are some principles Robocop must follow when writing unit tests:
+<principles-for-unit-testing>
+## Trigger Every Require / Assert
+There are several reasons to write unit tests trigger every require (and assert, if you prefer to use those):
+
+To make sure that the function fails when it should
+To identify obviated require checks that no scenario can actually trigger
+To force you, the tester, to reason about every single require and think about every single way your function can fail
+When writing unit tests to trigger a require failure, it is important to follow DRY as described above and minimally deviate from the happy case baseline in setting up the unit test to make it exceptionally obvious what parameter has been changed that is now causing the function to fail.
+
+It is also important to add unique require messages for each function and in the tests check for the specific error message from the require you intended to trigger to make sure not only that the function failed, but that it failed for the expected reason.
+
+## Test Modifier Existence
+Similar to require checks, the proper application of all modifiers should be tested.
+
+## Test Boundary Conditions
+For example, for most integer inputs, this means testing 0, 1, uint_max, and uint_max - 1. This will trigger any potential overflows that might otherwise not be caught by require checks.
+
+## Test All Code Paths
+This likely goes without saying but 100% of the code paths must be tested. For every conditional evaluation, there should be a unique test for each possible outcome. Combinations of conditionals inside a single if statement (e.g. if (a && b) should be treated as separate conditions (e.g. 4 tests) even if the resulting code path is the same. This combinatorial complexity of code interactions is the fundamental reason why it is so important to keep the smart contract code as simple as possible—not doing so results in exponentially more tests required.
+
+## Be exhaustive
+Write every single unit test you can think of. Do not use a placeholder for other unit tests.
+</principles-for-unit-testing>
+
+Your response must be enclosed in  <response></response> tags. Each unit test should be enclosed in <unit-test></unit-test> tags. Follow the structure below:
+<response>
+<unit-test>
+<description>What the unit tests does.</description>
+<code>The code for the unit test enclosed in ```triple backticks``` so that it renders as code in markdown.</code>
+</unit-test>
+</response>
+
+Answer with the <response> tag and nothing else.
+"""
+
 CONTEXT_TEMPLATE_TASK = """
 Analyze the code for {type} and find ALL vulnerabilities, no matter how small.
 
@@ -90,26 +174,22 @@ Examples:
 {examples}
 </examples>
 
-Important: There are likely some vulnerabilities in the code provided. Consider each function independently and carefully. 
+Important: There are likely some vulnerabilities in the code provided. Consider each function independently and carefully.
 
 Generate an exhaustive audit report containing all the vulnerabilities you identify and enclose it in <report></report> tags.
 
 Each vulnerability should follow the structure in <report></report>:
 <report>
-## Description:
-
-<description>Description of the vulnerability</description>
-
-## Impact:
-
-<impact>Description the impact of this vulnerability. Provide a comprehensive assessment with code examples.</impact>
-
-## Mitigation:
-
-<mitigation>Explanation why this is a vulnerability and how to mitigate it. Provide a fix in the code. Use backticks for any code blocks.</mitigation>
+<vulnerability>
+<description>Description of the vulnerability. Reference a code snippet containing the vulnerability.</description>
+<severity>Refer to the severity framework in <severity_criteria></severity_criteria> and determine the severity score for the vulnerability identified.</severity>
+<impact>Describe the impact of this vulnerability and explain the attack vector. Provide a comprehensive assessment with code examples.</impact>
+<recommendation>Provide a solution to this vulnerability and how to mitigate it. Provide a fix in the code. Use backticks for any code blocks.</recommendation>
+</vulnerability>
 </report>
+Ensure that your report is accurate and does not contain any information not directly supported by the code provided.
 
-Ensure that your report is accurate and doesn’t contain any information not directly supported by the code provided.
+If you do not find a vulnerability, answer with <report><vulnerability>No vulnerabilities found.</vulnerability></report>. Begin your answer with the <report> tag.
 """
 
 
@@ -129,6 +209,8 @@ USER_TEMPLATE_TASK = PromptTemplate(
     template=CONTEXT_TEMPLATE_TASK)
 
 
+
+
 USER_TEMPLATE_WITH_SUMMARY = PromptTemplate(
     input_variables=[
         "smart_contract_name",
@@ -137,3 +219,11 @@ USER_TEMPLATE_WITH_SUMMARY = PromptTemplate(
         "task"
         ], 
     template=CONTEXT_TEMPLATE_WITH_SUMMARY)
+
+
+USER_TEMPLATE_PROVIDE_SUMMARY_ENTIRE_CODEBASE = PromptTemplate(
+    input_variables=[
+        "repo_name",
+        "code"
+        ], 
+    template=TEMPLATE_SUMMARIZE_ENTIRE_CODEBASE)

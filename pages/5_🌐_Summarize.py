@@ -32,12 +32,7 @@ from langchain.schema import (
     SystemMessage
 )
 
-st.set_page_config(page_title="Report", page_icon="📖")
-
-st.markdown(
-    """This section pulls raw code directly from Github instead of finding relevant embeddings then generates a report.
-    """
-)
+st.set_page_config(page_title="Summarize Codebase", page_icon="📖")
 
 logger = get_logger(__name__)
 parser = etree.XMLParser(recover=True)
@@ -59,13 +54,9 @@ if "contract_names" not in st.session_state:
 if "reports_to_generate" not in st.session_state:
     st.session_state["reports_to_generate"] = []
 
-# if "vulnerabilities_to_find" not in st.session_state:
-#     st.session_state["vulnerabilities_to_find"] = []
-
-
 os.environ['ANTHROPIC_API_KEY'] = st.session_state["anthropic_api_key"] if st.session_state["settings_override"] else st.secrets.anthropic_api_key
 
-st.markdown("# Report")
+st.markdown("# Summarize entire codebase")
 
 def get_github_folders():
     bucket = storage_client.from_('repo_contents')
@@ -88,8 +79,6 @@ github_url = st.text_input(
 
 commit_branch = st.text_input(label="Enter the commit ID (optional) or branch (default:main",
     value="master or main or your commit ID")
-
-render_output = st.checkbox('Render output', value=True)
 
 def save_github_files(data):
     bucket = storage_client.from_('repo_contents')
@@ -117,7 +106,7 @@ def get_github_files(project_name):
 
 def save_report(project_name):
     bucket = storage_client.from_('reports')
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".md", prefix="report_") as fp:
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=".md", prefix="unit_tests_") as fp:
         fp.write(output_txt)
         
         print(fp.name.split("/")[-1])
@@ -165,14 +154,6 @@ def filter_by_name(name):
     filtered_text = list(filter(lambda doc: (doc.metadata['file_name'] == name), st.session_state["raw_code"]))
     return filtered_text
 
-def get_code_summary(code):
-    chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_PROVIDE_SUMMARY)
-    response = chain.run({
-        'code': code
-        })
-    return response
-
-
 button = st.button("Analyze")
 
 if button:
@@ -206,124 +187,114 @@ reports_to_generate = st.multiselect(
 
 st.session_state["reports_to_generate"] = reports_to_generate
 
-vulnerabilities_to_find = st.multiselect(
-    "Pick the vulnerabilities to look for.",
-    list(prompts.VULNERABILITIES.keys())
-)
-
 generated_reports = []
 
 llm = Anthropic(
     temperature=0,
-    max_tokens_to_sample=1024,
+    max_tokens_to_sample=1024*4,
+    # max_tokens_limit=80000,
     verbose=True
 )
 
 output_txt = ""
 
-if st.button("Generate Reports"):
+if st.button("Generate Summary"):
     current_date = datetime.date.today()
     output_txt += f"# Robocop Audit Report for \n{github_url}\n\nDate: {current_date}\n\n"
     formatted_files = [f"* {report}" for report in st.session_state["reports_to_generate"]]
     scope = "\n".join(formatted_files)
     output_txt += scope + "\n"
+
+    all_code = ""
+    st.info(f'Generating report for \n{scope}', icon="ℹ️")
     for report in st.session_state["reports_to_generate"]:
-        st.info(f'Generating report for {report}', icon="ℹ️")
-        summary = ''
-        gen_report = {}
-        gen_report[report] = {}
-        gen_report[report]["file"] = report
+        code = filter_by_name(report.split("/")[-1])[0].page_content
+        all_code += f"\n\n{report}\n\nCode:\n\n```{code}```"
+    logger.info(all_code)
+    logger.info("Generating code base summary...")
+    with st.spinner('Generating code base summary...'):
+        chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_PROVIDE_SUMMARY_ENTIRE_CODEBASE)
+        response = chain.run({
+            'repo_name': project_option,
+            'code': all_code
+            })
+        st.write(response)
+    
+        # summary = ''
+        # gen_report = {}
+        # gen_report[report] = {}
+        # gen_report[report]["file"] = report
         
-        output_txt += f"# File Analyzed: {report}\n"
-        with st.spinner('Retrieving code...'):
-            code = filter_by_name(report.split("/")[-1])[0].page_content
-            num_tokens = anthropic.count_tokens(code)
-            gen_report[report]['code'] = code
-            gen_report[report]['num_tokens_code'] = num_tokens
-            logger.info(f"Processing code:\n{code}")
-            status.info(f'Retrieved code for {report} - Processing {num_tokens} tokens.', icon="ℹ️")
-        with st.spinner('Getting summary...'):
-            response = get_code_summary(code)
-            logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
-            gen_report[report]['summary'] = response
-            output_txt += response + "\n"
-            if render_output:
-                st.write(response)
-        for bug_type in vulnerabilities_to_find:
-            with st.spinner(f'Scanning for {bug_type} bugs...'):
-                formatted_task = prompts.USER_TEMPLATE_TASK.format(
-                    type=bug_type, 
-                    description=prompts.VULNERABILITIES[bug_type]["description"], 
-                    examples=prompts.VULNERABILITIES[bug_type]["description"])
-                
-                chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_WITH_SUMMARY)
-                response = chain.run({
-                    "smart_contract_name": report,
-                    "summary": summary,
-                    "code": code,
-                    "task": formatted_task
-                    })
-                logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
+        # output_txt += f"# File Analyzed: {report}\n"
+        # with st.spinner('Retrieving code...'):
+        #     code = filter_by_name(report.split("/")[-1])[0].page_content
+        #     num_tokens = anthropic.count_tokens(code)
+        #     gen_report[report]['code'] = code
+        #     gen_report[report]['num_tokens_code'] = num_tokens
+        #     logger.info(f"Processing code:\n{code}")
+        #     status.info(f'Retrieved code for {report} - Processing {num_tokens} tokens.', icon="ℹ️")
+        # with st.spinner('Getting summary...'):
+        #     chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_PROVIDE_SUMMARY)
+        #     response = chain.run({
+        #         'code': code
+        #         })
+        #     summary = response
+        #     logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
+        #     gen_report[report]['summary'] = response
+        #     output_txt += response + "\n"
+        #     if render_output:
+        #         st.write(response)
+        # with st.spinner('Generating unit tests...'):
+        #     chain = LLMChain(llm=llm, prompt=prompts.USER_TEMPLATE_WITH_SUMMARY)
+        #     response = chain.run({
+        #         "smart_contract_name": report,
+        #         "summary": summary,
+        #         "code": code,
+        #         "task": prompts.CONTEXT_TEMPLATE_UNIT_TESTS
+        #         })
+        #     logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
+        #     resp_parsed = etree.fromstring(response.strip(), parser=parser)
+        #     logger.info(resp_parsed)
+        #     ui_outputs = []
+        #     tests_produced = []
+        #     for unit_test in resp_parsed:
+        #         try:
+        #             unit_test_instance = {}
+        #             unit_test_instance["description"] = unit_test[0].text
+        #             unit_test_instance["code"] = unit_test[1].text
+        #             ui_output = f"""### Description\n\n{unit_test_instance["description"]}\n\n### Unit Test\n\n{unit_test_instance["code"]}"""
+        #             ui_outputs.append(ui_output)
+        #             tests_produced.append(unit_test_instance)
 
-                resp_parsed = etree.fromstring(response.strip(), parser=parser)
-                
-                ui_outputs = []
-                found_bugs = []
+        #         except:
+        #             logger.info("No unit tests found")
+        #     for output in ui_outputs:
+        #         logger.info(output)
+        #         if render_output:
+        #             st.write(output)
+        #             st.divider()
 
-                for vulnerability in resp_parsed:
-                    logger.info(vulnerability[0].text)
-                    logger.info(vulnerability.text)
 
-                    try:
-                        vulnerability_instance = {}
-                        vulnerability_instance["description"] = vulnerability[0].text
-                        vulnerability_instance["severity"] = vulnerability[1].text
-                        vulnerability_instance["impact"] = vulnerability[2].text
-                        vulnerability_instance["recommendation"] = vulnerability[3].text
-                        print(vulnerability_instance)
-                        ui_output = f"""### Description\n\n{vulnerability_instance["description"]}\n\n### Severity\n\n{vulnerability_instance["severity"]}\n\n### Impact\n\n{vulnerability_instance["impact"]}\n\n### Recommendation\n\n{vulnerability_instance["recommendation"]}\n\n"""
-                        ui_outputs.append(ui_output)
-                        found_bugs.append(vulnerability_instance)
-                        print(ui_output)
-                        gen_report[report]['bugs'] = {
-                            bug_type : found_bugs
-                        }
-                    except:
-                        logger.info("No vulnerabities found")
-                    
-                        
 
-                header = f"## Analysis results for {bug_type} vulnerabilities \n\n"
-                output_txt += header
-                st.write(header)
+    # logger.info(generated_reports)
+    # json_obj = json.dumps(generated_reports)
+    # status.success("Done!")
+    # st.balloons()
 
-                try:
-                    for output in ui_outputs:
-                        logger.info(output)
-                        if render_output: st.write(output)
-                        output_txt += output + "\n"
-                except:
-                    st.write("N/A")
-            generated_reports.append(gen_report)
-    logger.info(generated_reports)
-    json_obj = json.dumps(generated_reports)
-    status.success("Done!")
-    st.balloons()
-
-    if st.button("Save Report"):
-        save_report(project_name)
+    # if st.button("Save Report"):
+    #     save_report(project_name)
 
     
-    st.download_button(
-        label="Download data as JSON",
-        data=json_obj,
-        file_name='report_findings.json',
-        mime='application/json',
-    )
+    # st.download_button(
+    #     label="Download data as JSON",
+    #     data=json_obj,
+    #     file_name='report_findings.json',
+    #     mime='application/json',
+    # )
 
-    st.download_button(
-        label="Download data as Text (markdown)",
-        data=output_txt,
-        file_name='report_findings.md',
-        mime='text/plain',
-    )
+    # st.download_button(
+    #     label="Download data as Text (markdown)",
+    #     data=output_txt,
+    #     file_name='report_findings.md',
+    #     mime='text/plain',
+    # )

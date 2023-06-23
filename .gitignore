@@ -2,3 +2,5 @@ secrets.toml
 .DS_Store
 .DS_Store
 *.pyc
+test.py
+.DS_Store

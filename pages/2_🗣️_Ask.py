@@ -25,7 +25,6 @@ from streamlit_chat import message
 st.set_page_config(page_title="Q&A", page_icon="🤖")
 
 st.markdown("# Q&A")
-st.sidebar.header("Q&A")
 
 st.markdown(
     """Now that the code has been processed, you can ask it questions.
@@ -53,9 +52,9 @@ if "anthropic_api_key" not in st.session_state:
 if "settings_override" not in st.session_state:
     st.session_state["settings_override"] = ''
 
-if "retriever" not in st.session_state:
-    db = DeepLake(dataset_path="hub://mrspaghetticode/uniswap-v3", read_only=True)
-    st.session_state["retriever"] = db.as_retriever()
+# if "retriever" not in st.session_state:
+#     db = DeepLake(dataset_path="hub://mrspaghetticode/uniswap-v3", read_only=True)
+#     st.session_state["retriever"] = db.as_retriever()
 
 if "system_message_prompt" not in st.session_state:
     st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template("This is a GitHub repo.")
@@ -158,8 +157,8 @@ if st.button("Load embeddings"):
         retriever.search_kwargs['maximal_marginal_relevance'] = maximal_marginal_relevance
         retriever.search_kwargs['fetch_k'] = int(k_for_mrr)
         print(retriever)
-        st.session_state["retriever"] = retriever
-        print(st.session_state["retriever"])
+        # st.session_state["retriever"] = retriever
+        # print(st.session_state["retriever"])
         status.success(f"Embeddings loaded from {dataset_path}")
 
     except:
@@ -174,7 +173,9 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
 def get_qa_model(model_option):
     # some notes on memory
     # https://stackoverflow.com/questions/76240871/how-do-i-add-memory-to-retrievalqa-from-chain-type-or-how-do-i-add-a-custom-pr
-    retriever = st.session_state["retriever"]
+    dataset_path = f'hub://mrspaghetticode/{dataset_name}'
+    db = DeepLake(dataset_path=dataset_path, read_only=True, embedding_function=embeddings)
+    retriever = db.as_retriever()
 
     if model_option.startswith("gpt"):
         logger.info('Using OpenAI model %s', model_option)

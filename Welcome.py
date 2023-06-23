@@ -12,8 +12,13 @@ st.markdown(
     Robocop is an AI-powered tool for security researchers. It uses large language models (LLMs) to help identify and fix vulnerabilities in smart contracts.
 
     ### How does it work?
-    First, go to "Load Data" and enter the URL of a public GitHub repo then click "Analyze". Robocop will download and process all the files in the repo.
-    Next, you will be able to chat with an LLM (like ChatGPT) to identify potential vulnerabilities.
+    Robocop slurps in all the target code then analyzes it for common vulnerabilities. There are 4 main pages:
+    - 🧩 Configure: Add your API keys (Note: by default you don't have to unless you want to override them)
+    - 🤖 Analyze: Compute embeddings for your code base.
+    - 🗣️ Ask: Chat interactively with the code base. Robocop is there to answer any questions you have about the code you are analyzing.
+    - 📖 Report: Generate a full report of the target base.
+
+    **This is a prototype built by Joao Fiadeiro at Jump Crypto.**
     """
 )
 
