@@ -106,7 +106,7 @@ def get_github_files(project_name):
 
 def save_report(project_name):
     bucket = storage_client.from_('reports')
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".md", prefix="unit_tests_") as fp:
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=".md", prefix="summary") as fp:
         fp.write(output_txt)
         
         print(fp.name.split("/")[-1])
@@ -206,7 +206,7 @@ if st.button("Generate Summary"):
     output_txt += scope + "\n"
 
     all_code = ""
-    st.info(f'Generating report for \n{scope}', icon="ℹ️")
+    status = st.info(f'Generating report for \n{scope}', icon="ℹ️")
     for report in st.session_state["reports_to_generate"]:
         code = filter_by_name(report.split("/")[-1])[0].page_content
         all_code += f"\n\n{report}\n\nCode:\n\n```{code}```"
@@ -219,6 +219,7 @@ if st.button("Generate Summary"):
             'code': all_code
             })
         st.write(response)
+        output_txt += response
     
         # summary = ''
         # gen_report = {}
@@ -278,23 +279,15 @@ if st.button("Generate Summary"):
 
     # logger.info(generated_reports)
     # json_obj = json.dumps(generated_reports)
-    # status.success("Done!")
-    # st.balloons()
+    status.success("Done!")
+    st.balloons()
 
-    # if st.button("Save Report"):
-    #     save_report(project_name)
+    if st.button("Save Summary"):
+        save_report(project_name)
 
-    
-    # st.download_button(
-    #     label="Download data as JSON",
-    #     data=json_obj,
-    #     file_name='report_findings.json',
-    #     mime='application/json',
-    # )
-
-    # st.download_button(
-    #     label="Download data as Text (markdown)",
-    #     data=output_txt,
-    #     file_name='report_findings.md',
-    #     mime='text/plain',
-    # )
+    st.download_button(
+        label="Download data as Text (markdown)",
+        data=output_txt,
+        file_name='repo_summary.md',
+        mime='text/plain',
+    )
