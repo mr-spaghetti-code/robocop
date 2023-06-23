@@ -222,6 +222,7 @@ llm = Anthropic(
 output_txt = ""
 
 if st.button("Generate Reports"):
+    status = st.info(f'Generating reports', icon="ℹ️")
     current_date = datetime.date.today()
     output_txt += f"# Robocop Audit Report for \n{github_url}\n\nDate: {current_date}\n\n"
     formatted_files = [f"* {report}" for report in st.session_state["reports_to_generate"]]
