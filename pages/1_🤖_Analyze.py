@@ -7,9 +7,9 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import DeepLake
 
-st.set_page_config(page_title="Analyze Repo", page_icon="🤖")
+st.set_page_config(page_title="Summarize Codebase", page_icon="🤖")
 
-st.markdown("# Analyze")
+st.markdown("# Summarize Codebase")
 
 st.write(
   """First, we have to load all the code from the repo you are investigating."""
@@ -17,11 +17,11 @@ st.write(
 
 github_url = st.text_input(label="Enter the URL of a _public_ GitHub repo")
 
-commit_branch = st.text_input(label="Enter the commit ID (optional) or branch (default:main",
-  value="master")
+commit_branch = st.text_input(label="Enter the commit ID or branch (Default: main)",
+  value="main")
 
 dataset_name = st.text_input(
-    label="Dataset name"
+    label="Dataset name to save into DeepLake (eg. uniswap-v3)"
 )
 
 if "settings_override" not in st.session_state:
@@ -44,14 +44,12 @@ with st.expander("Advanced settings"):
 
 
 def load_text(clone_url):
-  # loader = GitLoader(repo_path="./juice-buyback/")
   loader = GitLoader(
       clone_url=clone_url,
       repo_path=tmpdirname,
       branch=commit_branch,
       file_filter = lambda file_path: file_path.endswith(filter_extension)
   )
-  # loader = GitLoader(clone_url=clone_url, repo_path="./lido-dao", branch = "master", file_filter = lambda file_path: file_path.endswith(".sol"))
   data = loader.load()
   print(data[0])
   text_splitter = CharacterTextSplitter(chunk_size=int(chunk_size), chunk_overlap=20)
@@ -68,18 +66,20 @@ def compute_embeddings(texts):
 
 if st.button("Analyze"):
   status = st.info(f'Pulling from {github_url}', icon="ℹ️")
+  if not github_url or not commit_branch or not dataset_name:
+    status.warning("Make sure you fill in all the fields above.")
+  else:
+    with st.spinner('Processing...'):
+      with tempfile.TemporaryDirectory() as tmpdirname:
+        print('created temporary directory', tmpdirname)
 
-  with st.spinner('Processing...'):
-    with tempfile.TemporaryDirectory() as tmpdirname:
-      print('created temporary directory', tmpdirname)
+        status.info("Loading data")
 
-      status.info("Loading data")
+        texts = load_text(clone_url=github_url)
 
-      texts = load_text(clone_url=github_url)
+        status.info("Generating embeddings")
 
-      status.info("Generating embeddings")
+        dataset_path = compute_embeddings(texts)
 
-      dataset_path = compute_embeddings(texts)
-
-      status.success(f"Done! Sent the data to {dataset_path}")
-      st.balloons()
+        status.success(f"Done! Sent the data to {dataset_path}")
+        st.balloons()

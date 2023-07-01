@@ -36,7 +36,7 @@ st.markdown(
 )
 
 dataset_name = st.text_input(
-    label="Dataset name"
+    label="Dataset name (eg. uniswap-v3)"
 )
 
 
@@ -51,10 +51,6 @@ if "anthropic_api_key" not in st.session_state:
 
 if "settings_override" not in st.session_state:
     st.session_state["settings_override"] = ''
-
-# if "retriever" not in st.session_state:
-#     db = DeepLake(dataset_path="hub://mrspaghetticode/uniswap-v3", read_only=True)
-#     st.session_state["retriever"] = db.as_retriever()
 
 if "system_message_prompt" not in st.session_state:
     st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template("This is a GitHub repo.")
@@ -113,6 +109,8 @@ If you don't know the answer, just say that you don't know, don't try to make up
 {context}
 """
 
+embeddings = 'test'
+
 with st.expander("Advanced settings"):
     distance_metric = st.text_input(
         label="How to measure distance: (L2, L1, max, cos, dot)",
@@ -127,7 +125,7 @@ with st.expander("Advanced settings"):
         value="0"
     )
     max_tokens = st.text_input(
-        label="Max tokens in the response. (Default: 1000)",
+        label="Max tokens in the response. (Default: 2,000)",
         value="2000"
     )
     k = st.text_input(
@@ -143,27 +141,6 @@ with st.expander("Advanced settings"):
         value=True
     )
 
-if st.button("Load embeddings"):
-    status = st.info(f'Loading embeddings for {dataset_name}', icon="ℹ️")
-    embeddings = OpenAIEmbeddings(disallowed_special=())
-    dataset_path = f'hub://mrspaghetticode/{dataset_name}'
-    print(f"Loading embeddings from {dataset_name}")
-    try:
-        db = DeepLake(dataset_path=dataset_path, read_only=True, embedding_function=embeddings)
-        retriever = db.as_retriever()
-        # Settings
-        retriever.search_kwargs['distance_metric'] = distance_metric
-        retriever.search_kwargs['k'] = int(k)
-        retriever.search_kwargs['maximal_marginal_relevance'] = maximal_marginal_relevance
-        retriever.search_kwargs['fetch_k'] = int(k_for_mrr)
-        print(retriever)
-        # st.session_state["retriever"] = retriever
-        # print(st.session_state["retriever"])
-        status.success(f"Embeddings loaded from {dataset_path}")
-
-    except:
-        status.warning("Could not load embeddings.")
-
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding(encoding_name)
@@ -174,8 +151,14 @@ def get_qa_model(model_option):
     # some notes on memory
     # https://stackoverflow.com/questions/76240871/how-do-i-add-memory-to-retrievalqa-from-chain-type-or-how-do-i-add-a-custom-pr
     dataset_path = f'hub://mrspaghetticode/{dataset_name}'
-    db = DeepLake(dataset_path=dataset_path, read_only=True, embedding_function=embeddings)
+    
+    db = DeepLake(dataset_path=dataset_path, read_only=True, embedding_function=OpenAIEmbeddings(disallowed_special=()))
     retriever = db.as_retriever()
+
+    retriever.search_kwargs['distance_metric'] = distance_metric
+    retriever.search_kwargs['k'] = int(k)
+    retriever.search_kwargs['maximal_marginal_relevance'] = maximal_marginal_relevance
+    retriever.search_kwargs['fetch_k'] = int(k_for_mrr)
 
     if model_option.startswith("gpt"):
         logger.info('Using OpenAI model %s', model_option)
@@ -203,8 +186,8 @@ def get_qa_model(model_option):
         )
     return qa
 
-def generate_system_prompt():
-    qa = get_qa_model(model_option)
+def generate_system_prompt(qa):
+    logger.info("Generating System Prompt")
     summary_prompt = f"Provide a short summary (five bullet points max) of the codebase or repository you are auditing {dataset_name}."
     response = qa.run(
         {"question": summary_prompt,
@@ -217,11 +200,11 @@ def generate_system_prompt():
     
 
 
-def generate_response(prompt, chat_history):
+def generate_response(prompt, chat_history, qa):
     # maybe use a different chain that includes model retriever, memory)
     # https://python.langchain.com/en/latest/modules/indexes/getting_started.html
     # https://github.com/hwchase17/langchain/discussions/3115
-    qa = get_qa_model(model_option)
+    
 
     print(qa)
     print("*****")
@@ -246,18 +229,24 @@ def generate_response(prompt, chat_history):
     logger.info(qa.memory)
     return response
 
-def generate_first_response():
-    with st.spinner('Loading Robocop...'):
-        st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template(generate_system_prompt())
-        first_prompt = "Please provide an overview of the codebase along with some potential areas to examine for vulnerabilities."
-        print(st.session_state["chat_history"])
-        first_response = generate_response(first_prompt, st.session_state["chat_history"])
-        st.session_state.past.append(first_prompt)
-        st.session_state.generated.append(first_response)
-        st.session_state.chat_history.append((first_prompt,first_response))
+def generate_first_response(qa):
+    st.session_state["system_message_prompt"] = SystemMessagePromptTemplate.from_template(generate_system_prompt(qa))
+    first_prompt = "Please provide an overview of the codebase along with some potential areas to examine for vulnerabilities."
+    print(st.session_state["chat_history"])
+    first_response = generate_response(first_prompt, st.session_state["chat_history"], qa)
+    st.session_state.past.append(first_prompt)
+    st.session_state.generated.append(first_response)
+    st.session_state.chat_history.append((first_prompt,first_response))
 
 if st.button("🚨 Start 🚨"):
-    generate_first_response()
+    qa = None
+    status = st.info(f'Loading embeddings', icon="ℹ️")
+    with st.spinner('Loading Embeddings...'):
+        qa = get_qa_model(model_option)
+    with st.spinner('Loading Robocop...'):
+        status.info(f'Initializing conversation.', icon="ℹ️")
+        generate_first_response(qa)
+        status.info(f'Ready to chat. Type your question and click on "Ask"', icon="✅")
 
 st.header("Talk to Robocop")
 
@@ -273,7 +262,7 @@ if clear_history:
     # Clear memory in Langchain
     memory.clear()
     st.session_state["generated"] = ["Hi, I'm Robocop. How may I help you?"]
-    st.session_state["chat_history"] = [("Hi","Hi, I'm Robocop. How may I help you?")]
+    st.session_state["chat_history"] = [("Hi","Hi, I'm Robocop. Ask me anything about the target codebase.")]
     st.session_state["past"] = ["Hi!"]
     st.experimental_rerun()
 
@@ -294,8 +283,10 @@ with input_container:
 ## Conditional display of AI generated responses as a function of user provided prompts
 with response_container:
     if button:
+        logger.info("Ask button pressed")
+        qa = get_qa_model(model_option)
         with st.spinner('Processing...'):
-            response = generate_response(user_input, st.session_state["chat_history"])
+            response = generate_response(user_input, st.session_state["chat_history"], qa)
             st.session_state.past.append(user_input)
             st.session_state.generated.append(response)
             st.session_state.chat_history.append((user_input,response))
