@@ -5,8 +5,6 @@ import os
 import pickle
 import tempfile
 from lxml import etree
-import re
-
 
 from prompts.claude import prompts
 import streamlit as st
@@ -17,20 +15,7 @@ from langchain.chains import LLMChain
 from langchain.chat_models import ChatAnthropic
 from langchain.document_loaders import GitLoader
 from langchain.llms import Anthropic
-
-
-from langchain.prompts import (
-    ChatPromptTemplate,
-    PromptTemplate,
-    SystemMessagePromptTemplate,
-    AIMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-)
-from langchain.schema import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage
-)
+from langchain.prompts import PromptTemplate
 
 st.set_page_config(page_title="Report", page_icon="📖")
 
@@ -214,6 +199,7 @@ vulnerabilities_to_find = st.multiselect(
 generated_reports = []
 
 llm = Anthropic(
+    model="claude-2",
     temperature=0,
     max_tokens_to_sample=1024,
     verbose=True
@@ -264,6 +250,9 @@ if st.button("Generate Reports"):
                     "code": code,
                     "task": formatted_task
                     })
+                
+                review_chain = LLMChain(llm=llm, prompt=prompts.REVIEWER_TASK_TEMPLATE)
+
                 logger.info(f"RESPONSE RECEIVED\n*********\n{response}")
 
                 resp_parsed = etree.fromstring(response.strip(), parser=parser)
@@ -272,8 +261,8 @@ if st.button("Generate Reports"):
                 found_bugs = []
 
                 for vulnerability in resp_parsed:
-                    logger.info(vulnerability[0].text)
-                    logger.info(vulnerability.text)
+                    # logger.info(vulnerability[0].text)
+                    # logger.info(vulnerability.text)
 
                     try:
                         vulnerability_instance = {}
@@ -283,12 +272,19 @@ if st.button("Generate Reports"):
                         vulnerability_instance["recommendation"] = vulnerability[3].text
                         print(vulnerability_instance)
                         ui_output = f"""### Description\n\n{vulnerability_instance["description"]}\n\n### Severity\n\n{vulnerability_instance["severity"]}\n\n### Impact\n\n{vulnerability_instance["impact"]}\n\n### Recommendation\n\n{vulnerability_instance["recommendation"]}\n\n"""
-                        ui_outputs.append(ui_output)
-                        found_bugs.append(vulnerability_instance)
-                        print(ui_output)
+
                         gen_report[report]['bugs'] = {
                             bug_type : found_bugs
                         }
+                        review = review_chain.run({
+                            "report": ui_output,
+                            "code": code
+                        })
+
+                        ui_output += "---\n### Expert Reviewer\n" + review
+                        ui_outputs.append(ui_output)
+                        found_bugs.append(vulnerability_instance)
+                        print(ui_output)
                     except:
                         logger.info("No vulnerabities found")
                     

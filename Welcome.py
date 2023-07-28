@@ -18,7 +18,6 @@ st.markdown(
     - 🗣️ Ask: Chat interactively with the code base. Robocop is there to answer any questions you have about the code you are analyzing.
     - 📖 Report: Generate a full report of the target base.
 
-    **This is a prototype built by Joao Fiadeiro at Jump Crypto.**
     """
 )
 

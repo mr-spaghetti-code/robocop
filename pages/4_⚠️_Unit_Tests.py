@@ -212,14 +212,13 @@ llm = Anthropic(
 output_txt = ""
 
 if st.button("Generate Unit Tests"):
-    status = st.info(f'Generating reports', icon="ℹ️")
+    status = st.info(f'Generating unit tests', icon="ℹ️")
     current_date = datetime.date.today()
     output_txt += f"# Robocop Unit Tests for \n{github_url}\n\nDate: {current_date}\n\n"
     formatted_files = [f"* {report}" for report in st.session_state["reports_to_generate"]]
     scope = "\n".join(formatted_files)
     output_txt += scope + "\n"
     for report in st.session_state["reports_to_generate"]:
-        st.info(f'Generating report for {report}', icon="ℹ️")
         summary = ''
         gen_report = {}
         gen_report[report] = {}
@@ -274,8 +273,8 @@ if st.button("Generate Unit Tests"):
 
     # logger.info(generated_reports)
     # json_obj = json.dumps(generated_reports)
-    # status.success("Done!")
-    # st.balloons()
+    status.success("Done!")
+    st.balloons()
 
     # if st.button("Save Report"):
     #     save_report(project_name)
